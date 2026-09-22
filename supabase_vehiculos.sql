@@ -1,7 +1,6 @@
 -- ========================================================
--- TABLA DE CONTROL DE VEHICULOS (SHOWROOM, TEST DRIVE, TERRAZA)
+-- 1. TABLA PRINCIPAL DE VEHICULOS (FLOTA ACTIVA)
 -- ========================================================
-
 CREATE TABLE IF NOT EXISTS vehiculos (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   modelo TEXT NOT NULL,
@@ -15,14 +14,11 @@ CREATE TABLE IF NOT EXISTS vehiculos (
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- Indices para busqueda rapida y filtros
 CREATE INDEX IF NOT EXISTS idx_vehiculos_ubicacion ON vehiculos(ubicacion);
 CREATE INDEX IF NOT EXISTS idx_vehiculos_chasis ON vehiculos(chasis);
 
--- Habilitar Row Level Security (RLS)
 ALTER TABLE vehiculos ENABLE ROW LEVEL SECURITY;
 
--- Politica para permitir lectura, insercion, actualizacion y borrado anonimo
 DO $$
 BEGIN
   IF NOT EXISTS (
@@ -33,7 +29,40 @@ BEGIN
 END $$;
 
 -- ========================================================
--- INSERCION DE LA FLOTA INICIAL (TERRAZA, TEST DRIVE, SHOWROOM)
+-- 2. TABLA DE HISTORIAL DIARIO (REGISTROS CONGELADOS POR FECHA)
+-- ========================================================
+CREATE TABLE IF NOT EXISTS vehiculos_historial (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  fecha DATE NOT NULL,
+  vehiculo_id UUID REFERENCES vehiculos(id) ON DELETE SET NULL,
+  chasis TEXT NOT NULL,
+  modelo TEXT NOT NULL,
+  color TEXT NOT NULL,
+  placa TEXT DEFAULT '',
+  kilometraje INT NOT NULL DEFAULT 0,
+  ubicacion TEXT NOT NULL DEFAULT 'Showroom',
+  novedades TEXT DEFAULT '',
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  UNIQUE (fecha, chasis)
+);
+
+CREATE INDEX IF NOT EXISTS idx_vehiculos_historial_fecha ON vehiculos_historial(fecha);
+CREATE INDEX IF NOT EXISTS idx_vehiculos_historial_chasis ON vehiculos_historial(chasis);
+
+ALTER TABLE vehiculos_historial ENABLE ROW LEVEL SECURITY;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies WHERE tablename = 'vehiculos_historial' AND policyname = 'Permitir todo en vehiculos_historial'
+  ) THEN
+    CREATE POLICY "Permitir todo en vehiculos_historial" ON vehiculos_historial FOR ALL USING (true) WITH CHECK (true);
+  END IF;
+END $$;
+
+-- ========================================================
+-- 3. INSERCION DE LA FLOTA INICIAL EN AMBAS TABLAS
 -- ========================================================
 
 INSERT INTO vehiculos (modelo, color, chasis, kilometraje, ubicacion, novedades)
@@ -70,6 +99,16 @@ VALUES
   ('BYD Shark', 'Blanca', 'LPE19W2A0VF011678', 51, 'Showroom', ''),
   ('BYD Seagull', 'Azul', 'LGXCE4CC4V2026837', 44, 'Showroom', '')
 ON CONFLICT (chasis) DO UPDATE SET
+  kilometraje = EXCLUDED.kilometraje,
+  ubicacion = EXCLUDED.ubicacion,
+  novedades = EXCLUDED.novedades,
+  updated_at = NOW();
+
+-- Guardar foto inicial en el historial diario con la fecha de hoy
+INSERT INTO vehiculos_historial (fecha, vehiculo_id, chasis, modelo, color, placa, kilometraje, ubicacion, novedades)
+SELECT CURRENT_DATE, id, chasis, modelo, color, placa, kilometraje, ubicacion, novedades
+FROM vehiculos
+ON CONFLICT (fecha, chasis) DO UPDATE SET
   kilometraje = EXCLUDED.kilometraje,
   ubicacion = EXCLUDED.ubicacion,
   novedades = EXCLUDED.novedades,

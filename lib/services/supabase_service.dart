@@ -264,8 +264,61 @@ class SupabaseService {
     return (data as List).map((e) => Vehiculo.fromJson(e)).toList();
   }
 
+  static Future<List<Vehiculo>> getVehiculosPorFecha(DateTime fecha) async {
+    final now = DateTime.now();
+    final esHoy = fecha.year == now.year && fecha.month == now.month && fecha.day == now.day;
+    final fechaStr = "${fecha.year.toString().padLeft(4, '0')}-${fecha.month.toString().padLeft(2, '0')}-${fecha.day.toString().padLeft(2, '0')}";
+
+    try {
+      final dataHistorial = await client
+          .from('vehiculos_historial')
+          .select()
+          .eq('fecha', fechaStr)
+          .order('ubicacion', ascending: true)
+          .order('modelo', ascending: true);
+
+      if ((dataHistorial as List).isNotEmpty) {
+        return dataHistorial.map((e) => Vehiculo.fromJson(e)).toList();
+      }
+    } catch (_) {
+      // Si la tabla de historial aún no existe en Supabase, caer a la flota actual
+    }
+
+    if (esHoy) {
+      final flotaActual = await getVehiculos();
+      if (flotaActual.isNotEmpty) {
+        try {
+          await guardarSnapshotDiario(fecha, flotaActual);
+        } catch (_) {}
+      }
+      return flotaActual;
+    }
+
+    return [];
+  }
+
+  static Future<void> guardarSnapshotDiario(DateTime fecha, List<Vehiculo> vehiculos) async {
+    final fechaStr = "${fecha.year.toString().padLeft(4, '0')}-${fecha.month.toString().padLeft(2, '0')}-${fecha.day.toString().padLeft(2, '0')}";
+    final batch = vehiculos.map((v) => {
+      'fecha': fechaStr,
+      if (v.id != null) 'vehiculo_id': v.id,
+      'chasis': v.chasis.toUpperCase().trim(),
+      'modelo': v.modelo.trim(),
+      'color': v.color.trim(),
+      'placa': v.placa?.toUpperCase().trim() ?? '',
+      'kilometraje': v.kilometraje,
+      'ubicacion': v.ubicacion,
+      'novedades': v.novedades?.trim() ?? '',
+      'updated_at': DateTime.now().toIso8601String(),
+    }).toList();
+
+    if (batch.isNotEmpty) {
+      await client.from('vehiculos_historial').upsert(batch, onConflict: 'fecha,chasis');
+    }
+  }
+
   static Future<void> addVehiculo(Vehiculo vehiculo) async {
-    await client.from('vehiculos').insert({
+    final insertResult = await client.from('vehiculos').insert({
       'modelo': vehiculo.modelo.trim(),
       'color': vehiculo.color.trim(),
       'chasis': vehiculo.chasis.trim().toUpperCase(),
@@ -275,21 +328,67 @@ class SupabaseService {
       'novedades': vehiculo.novedades?.trim() ?? '',
       'created_at': DateTime.now().toIso8601String(),
       'updated_at': DateTime.now().toIso8601String(),
-    });
+    }).select().maybeSingle();
+
+    final id = insertResult?['id']?.toString() ?? vehiculo.id;
+    final now = DateTime.now();
+    final fechaStr = "${now.year.toString().padLeft(4, '0')}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}";
+
+    try {
+      await client.from('vehiculos_historial').upsert({
+        'fecha': fechaStr,
+        if (id != null) 'vehiculo_id': id,
+        'chasis': vehiculo.chasis.trim().toUpperCase(),
+        'modelo': vehiculo.modelo.trim(),
+        'color': vehiculo.color.trim(),
+        'placa': vehiculo.placa?.trim().toUpperCase() ?? '',
+        'kilometraje': vehiculo.kilometraje,
+        'ubicacion': vehiculo.ubicacion,
+        'novedades': vehiculo.novedades?.trim() ?? '',
+        'updated_at': DateTime.now().toIso8601String(),
+      }, onConflict: 'fecha,chasis');
+    } catch (_) {}
   }
 
   static Future<void> updateEstadoVehiculo({
     required String id,
+    required String chasis,
+    required String modelo,
+    required String color,
+    String? placa,
     required int kilometraje,
     required String ubicacion,
     String? novedades,
+    DateTime? fecha,
   }) async {
-    await client.from('vehiculos').update({
-      'kilometraje': kilometraje,
-      'ubicacion': ubicacion,
-      'novedades': novedades?.trim() ?? '',
-      'updated_at': DateTime.now().toIso8601String(),
-    }).eq('id', id);
+    final now = DateTime.now();
+    final fechaObj = fecha ?? now;
+    final fechaStr = "${fechaObj.year.toString().padLeft(4, '0')}-${fechaObj.month.toString().padLeft(2, '0')}-${fechaObj.day.toString().padLeft(2, '0')}";
+    final esHoy = fechaObj.year == now.year && fechaObj.month == now.month && fechaObj.day == now.day;
+
+    if (esHoy) {
+      await client.from('vehiculos').update({
+        'kilometraje': kilometraje,
+        'ubicacion': ubicacion,
+        'novedades': novedades?.trim() ?? '',
+        'updated_at': DateTime.now().toIso8601String(),
+      }).eq('id', id);
+    }
+
+    try {
+      await client.from('vehiculos_historial').upsert({
+        'fecha': fechaStr,
+        'vehiculo_id': id,
+        'chasis': chasis.toUpperCase().trim(),
+        'modelo': modelo.trim(),
+        'color': color.trim(),
+        'placa': placa?.toUpperCase().trim() ?? '',
+        'kilometraje': kilometraje,
+        'ubicacion': ubicacion,
+        'novedades': novedades?.trim() ?? '',
+        'updated_at': DateTime.now().toIso8601String(),
+      }, onConflict: 'fecha,chasis');
+    } catch (_) {}
   }
 
   static Future<void> updateVehiculoCompleto(Vehiculo vehiculo) async {
@@ -304,6 +403,23 @@ class SupabaseService {
       'novedades': vehiculo.novedades?.trim() ?? '',
       'updated_at': DateTime.now().toIso8601String(),
     }).eq('id', vehiculo.id!);
+
+    final now = DateTime.now();
+    final fechaStr = "${now.year.toString().padLeft(4, '0')}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}";
+    try {
+      await client.from('vehiculos_historial').upsert({
+        'fecha': fechaStr,
+        'vehiculo_id': vehiculo.id,
+        'chasis': vehiculo.chasis.trim().toUpperCase(),
+        'modelo': vehiculo.modelo.trim(),
+        'color': vehiculo.color.trim(),
+        'placa': vehiculo.placa?.trim().toUpperCase() ?? '',
+        'kilometraje': vehiculo.kilometraje,
+        'ubicacion': vehiculo.ubicacion,
+        'novedades': vehiculo.novedades?.trim() ?? '',
+        'updated_at': DateTime.now().toIso8601String(),
+      }, onConflict: 'fecha,chasis');
+    } catch (_) {}
   }
 
   static Future<void> deleteVehiculo(String id) async {

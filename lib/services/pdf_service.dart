@@ -700,10 +700,12 @@ class PdfService {
     );
   }
 
-  static Future<void> generarReporteVehiculos(List<Vehiculo> vehiculos) async {
+  static Future<void> generarReporteVehiculos(List<Vehiculo> vehiculos, {DateTime? fecha}) async {
     final pdf = pw.Document();
-    final dateFormat = DateFormat("dd 'de' MMMM, yyyy - HH:mm", 'es');
+    final targetDate = fecha ?? DateTime.now();
+    final dateFormat = DateFormat("dd 'de' MMMM, yyyy", 'es');
     final now = DateTime.now();
+    final timeFormat = DateFormat("HH:mm", 'es');
 
     _logoCache ??= pw.MemoryImage(
       (await rootBundle.load('assets/img/images.png')).buffer.asUint8List(),
@@ -719,22 +721,22 @@ class PdfService {
 
     pdf.addPage(
       pw.MultiPage(
-        pageFormat: PdfPageFormat.a4.landscape,
-        margin: const pw.EdgeInsets.all(28),
+        pageFormat: PdfPageFormat.a4,
+        margin: const pw.EdgeInsets.all(24),
         build: (context) => [
           // Header
           pw.Row(
             mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
             crossAxisAlignment: pw.CrossAxisAlignment.center,
             children: [
-              pw.Image(logoImage, height: 48),
+              pw.Image(logoImage, height: 42),
               pw.Column(
                 crossAxisAlignment: pw.CrossAxisAlignment.end,
                 children: [
                   pw.Text(
                     'REPORTE DE CONTROL DE VEHÍCULOS',
                     style: pw.TextStyle(
-                      fontSize: 16,
+                      fontSize: 15,
                       fontWeight: pw.FontWeight.bold,
                       color: PdfColor.fromInt(0xFF0A101D),
                     ),
@@ -743,27 +745,27 @@ class PdfService {
                   pw.Text(
                     'Showroom  |  Test Drive  |  Terraza',
                     style: pw.TextStyle(
-                      fontSize: 11,
+                      fontSize: 10,
                       fontWeight: pw.FontWeight.bold,
                       color: PdfColor.fromInt(0xFF0284C7),
                     ),
                   ),
                   pw.SizedBox(height: 2),
                   pw.Text(
-                    'Generado: ${dateFormat.format(now)}',
-                    style: pw.TextStyle(fontSize: 9, color: PdfColors.grey700),
+                    'Fecha de Reporte: ${dateFormat.format(targetDate)}  (Emitido: ${timeFormat.format(now)})',
+                    style: pw.TextStyle(fontSize: 8.5, color: PdfColors.grey700),
                   ),
                 ],
               ),
             ],
           ),
-          pw.SizedBox(height: 12),
+          pw.SizedBox(height: 10),
           pw.Divider(color: PdfColor.fromInt(0xFF0284C7), thickness: 1.5),
-          pw.SizedBox(height: 12),
+          pw.SizedBox(height: 10),
 
           // Resumen Cards
           pw.Container(
-            padding: const pw.EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            padding: const pw.EdgeInsets.symmetric(horizontal: 14, vertical: 8),
             decoration: pw.BoxDecoration(
               color: PdfColors.grey100,
               borderRadius: pw.BorderRadius.circular(6),
@@ -773,60 +775,126 @@ class PdfService {
               mainAxisAlignment: pw.MainAxisAlignment.spaceAround,
               children: [
                 _buildVehiculoMetric('TOTAL FLOTA', totalVehiculos.toString(), PdfColors.blueGrey900),
-                _buildVehiculoMetric('SHOWROOM', totalShowroom.toString(), PdfColors.green800),
-                _buildVehiculoMetric('TEST DRIVE', totalTestDrive.toString(), PdfColors.blue800),
                 _buildVehiculoMetric('TERRAZA', totalTerraza.toString(), PdfColors.orange800),
+                _buildVehiculoMetric('TEST DRIVE', totalTestDrive.toString(), PdfColors.blue800),
+                _buildVehiculoMetric('SHOWROOM', totalShowroom.toString(), PdfColors.green800),
               ],
             ),
           ),
-          pw.SizedBox(height: 16),
+          pw.SizedBox(height: 10),
 
-          // Tabla de Vehículos
-          pw.Table.fromTextArray(
-            headerStyle: pw.TextStyle(
-              fontWeight: pw.FontWeight.bold,
-              color: PdfColors.white,
-              fontSize: 9,
-            ),
-            headerDecoration: pw.BoxDecoration(color: PdfColor.fromInt(0xFF0A101D)),
-            cellStyle: const pw.TextStyle(fontSize: 8.5),
-            cellAlignment: pw.Alignment.centerLeft,
-            cellPadding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 6),
-            border: pw.TableBorder.all(color: PdfColors.grey300, width: 0.5),
-            columnWidths: {
-              0: const pw.FixedColumnWidth(24),  // #
-              1: const pw.FlexColumnWidth(2.5), // Modelo
-              2: const pw.FlexColumnWidth(1.8), // Color
-              3: const pw.FlexColumnWidth(2.8), // Chasis
-              4: const pw.FlexColumnWidth(1.6), // Placa
-              5: const pw.FlexColumnWidth(1.8), // Km
-              6: const pw.FlexColumnWidth(2.0), // Ubicación
-              7: const pw.FlexColumnWidth(3.5), // Novedades
+          // Secciones divididas por Ubicación (TERRAZA, TEST DRIVE, SHOWROOM)
+          ...[
+            {
+              'titulo': 'TERRAZA',
+              'key': 'Terraza',
+              'bgColor': PdfColor.fromInt(0xFFFFFBEB),
+              'borderColor': PdfColor.fromInt(0xFFFDE68A),
+              'textColor': PdfColor.fromInt(0xFF92400E),
+              'headerBg': PdfColor.fromInt(0xFF78350F),
             },
-            headers: [
-              '#',
-              'Modelo',
-              'Color',
-              'Chasis (VIN)',
-              'Placa',
-              'Kilometraje',
-              'Ubicación',
-              'Novedades / Observaciones',
-            ],
-            data: List.generate(vehiculos.length, (index) {
-              final v = vehiculos[index];
-              return [
-                '${index + 1}',
-                v.modelo,
-                v.color,
-                v.chasis,
-                (v.placa != null && v.placa!.trim().isNotEmpty) ? v.placa! : 'S/P',
-                '${numberFormat.format(v.kilometraje)} km',
-                v.ubicacion,
-                (v.novedades != null && v.novedades!.trim().isNotEmpty) ? v.novedades! : 'Sin novedades',
-              ];
-            }),
-          ),
+            {
+              'titulo': 'TEST DRIVE',
+              'key': 'Test Drive',
+              'bgColor': PdfColor.fromInt(0xFFF0F9FF),
+              'borderColor': PdfColor.fromInt(0xFFBAE6FD),
+              'textColor': PdfColor.fromInt(0xFF0369A1),
+              'headerBg': PdfColor.fromInt(0xFF0C4A6E),
+            },
+            {
+              'titulo': 'SHOWROOM',
+              'key': 'Showroom',
+              'bgColor': PdfColor.fromInt(0xFFECFDF5),
+              'borderColor': PdfColor.fromInt(0xFFA7F3D0),
+              'textColor': PdfColor.fromInt(0xFF047857),
+              'headerBg': PdfColor.fromInt(0xFF064E3B),
+            },
+          ].expand((sec) {
+            final items = vehiculos
+                .where((v) => v.ubicacion.trim().toLowerCase() == (sec['key'] as String).toLowerCase())
+                .toList();
+            if (items.isEmpty) return <pw.Widget>[];
+
+            return <pw.Widget>[
+              // Título Grande y Destacado de Ubicación
+              pw.Container(
+                width: double.infinity,
+                margin: const pw.EdgeInsets.only(top: 10, bottom: 4),
+                padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                decoration: pw.BoxDecoration(
+                  color: sec['bgColor'] as PdfColor,
+                  borderRadius: pw.BorderRadius.circular(4),
+                  border: pw.Border.all(color: sec['borderColor'] as PdfColor, width: 1.2),
+                ),
+                child: pw.Row(
+                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                  children: [
+                    pw.Text(
+                      sec['titulo'] as String,
+                      style: pw.TextStyle(
+                        fontSize: 11,
+                        fontWeight: pw.FontWeight.bold,
+                        color: sec['textColor'] as PdfColor,
+                      ),
+                    ),
+                    pw.Text(
+                      '${items.length} ${items.length == 1 ? 'Vehículo' : 'Vehículos'}',
+                      style: pw.TextStyle(
+                        fontSize: 9,
+                        fontWeight: pw.FontWeight.bold,
+                        color: sec['textColor'] as PdfColor,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              // Tabla de los vehículos de esta ubicación
+              pw.Table.fromTextArray(
+                headerStyle: pw.TextStyle(
+                  fontWeight: pw.FontWeight.bold,
+                  color: PdfColors.white,
+                  fontSize: 7.2,
+                ),
+                headerDecoration: pw.BoxDecoration(color: sec['headerBg'] as PdfColor),
+                cellStyle: pw.TextStyle(fontSize: 7.0),
+                cellAlignment: pw.Alignment.centerLeft,
+                cellPadding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3.5),
+                border: pw.TableBorder.all(color: PdfColors.grey300, width: 0.5),
+                columnWidths: {
+                  0: const pw.FixedColumnWidth(16),  // #
+                  1: const pw.FlexColumnWidth(2.6), // Modelo
+                  2: const pw.FlexColumnWidth(1.6), // Color
+                  3: const pw.FlexColumnWidth(3.4), // Chasis
+                  4: const pw.FlexColumnWidth(1.4), // Placa
+                  5: const pw.FlexColumnWidth(1.8), // Km
+                  6: const pw.FlexColumnWidth(4.5), // Novedades
+                },
+                headers: [
+                  '#',
+                  'Modelo',
+                  'Color',
+                  'Chasis (VIN)',
+                  'Placa',
+                  'Kilometraje',
+                  'Novedades / Observaciones',
+                ],
+                data: List.generate(items.length, (index) {
+                  final v = items[index];
+                  return [
+                    '${index + 1}',
+                    v.modelo,
+                    v.color,
+                    v.chasis,
+                    (v.placa != null && v.placa!.trim().isNotEmpty) ? v.placa! : 'S/P',
+                    '${numberFormat.format(v.kilometraje)} km',
+                    (v.novedades != null && v.novedades!.trim().isNotEmpty) ? v.novedades! : 'Sin novedades',
+                  ];
+                }),
+              ),
+              pw.SizedBox(height: 6),
+            ];
+          }),
         ],
         footer: (context) => pw.Container(
           alignment: pw.Alignment.centerRight,
@@ -849,7 +917,7 @@ class PdfService {
     );
 
     final bytes = await pdf.save();
-    final fileName = 'reporte_vehiculos_byd_${now.year}_${now.month}_${now.day}.pdf';
+    final fileName = 'reporte_vehiculos_byd_${targetDate.year}_${targetDate.month.toString().padLeft(2, '0')}_${targetDate.day.toString().padLeft(2, '0')}.pdf';
 
     if (kIsWeb) {
       final blob = html.Blob([bytes], 'application/pdf');

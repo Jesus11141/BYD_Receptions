@@ -18,6 +18,14 @@ class _VehiculosScreenState extends State<VehiculosScreen> {
   String _filtroUbicacion = 'Todos';
   String _filtroTexto = '';
   final TextEditingController _searchCtrl = TextEditingController();
+  DateTime _fechaSeleccionada = DateTime.now();
+
+  bool get _esHoy {
+    final now = DateTime.now();
+    return _fechaSeleccionada.year == now.year &&
+        _fechaSeleccionada.month == now.month &&
+        _fechaSeleccionada.day == now.day;
+  }
 
   static const List<String> _ubicaciones = ['Showroom', 'Test Drive', 'Terraza'];
   static const List<String> _modelosSugeridos = [
@@ -46,7 +54,7 @@ class _VehiculosScreenState extends State<VehiculosScreen> {
   Future<void> _cargar() async {
     setState(() => _cargando = true);
     try {
-      final list = await SupabaseService.getVehiculos();
+      final list = await SupabaseService.getVehiculosPorFecha(_fechaSeleccionada);
       if (mounted) {
         setState(() {
           _vehiculos = list;
@@ -151,7 +159,7 @@ class _VehiculosScreenState extends State<VehiculosScreen> {
       );
 
       // Si hay filtro activo, preguntamos o generamos todos
-      await PdfService.generarReporteVehiculos(_vehiculos);
+      await PdfService.generarReporteVehiculos(_vehiculos, fecha: _fechaSeleccionada);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -304,23 +312,32 @@ class _VehiculosScreenState extends State<VehiculosScreen> {
       ),
     );
 
-    if (actualizado == true && vehiculo.id != null) {
+    if (actualizado == true) {
       final nuevoKm = int.tryParse(kmCtrl.text.trim()) ?? vehiculo.kilometraje;
       final nuevasNovedades = novCtrl.text.trim();
 
       try {
         await SupabaseService.updateEstadoVehiculo(
-          id: vehiculo.id!,
+          id: vehiculo.id ?? vehiculo.chasis,
+          chasis: vehiculo.chasis,
+          modelo: vehiculo.modelo,
+          color: vehiculo.color,
+          placa: vehiculo.placa,
           kilometraje: nuevoKm,
           ubicacion: ubicacionSeleccionada,
           novedades: nuevasNovedades,
+          fecha: _fechaSeleccionada,
         );
         _cargar();
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Estado de vehículo actualizado correctamente.'),
-              backgroundColor: Color(0xFF059669),
+            SnackBar(
+              content: Text(
+                _esHoy
+                    ? 'Estado de vehículo actualizado correctamente.'
+                    : 'Registro histórico actualizado para el ${DateFormat('dd/MM/yyyy').format(_fechaSeleccionada)}.',
+              ),
+              backgroundColor: const Color(0xFF059669),
             ),
           );
         }
@@ -709,7 +726,7 @@ class _VehiculosScreenState extends State<VehiculosScreen> {
               style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
             ),
             Text(
-              'Showroom • Test Drive • Terraza',
+              'Showroom | Test Drive | Terraza',
               style: TextStyle(fontSize: 11, color: Color(0xFF38BDF8)),
             ),
           ],
@@ -728,20 +745,153 @@ class _VehiculosScreenState extends State<VehiculosScreen> {
           const SizedBox(width: 8),
         ],
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _mostrarModalNuevoVehiculo(),
-        backgroundColor: const Color(0xFF0284C7),
-        foregroundColor: Colors.white,
-        icon: const Icon(Icons.add),
-        label: const Text(
-          'Nuevo Vehículo',
-          style: TextStyle(fontWeight: FontWeight.bold),
-        ),
-      ),
+      floatingActionButton: _esHoy
+          ? FloatingActionButton.extended(
+              onPressed: () => _mostrarModalNuevoVehiculo(),
+              backgroundColor: const Color(0xFF0284C7),
+              foregroundColor: Colors.white,
+              icon: const Icon(Icons.add),
+              label: const Text(
+                'Nuevo Vehículo',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+            )
+          : null,
       body: RefreshIndicator(
         onRefresh: _cargar,
         child: Column(
           children: [
+            // Barra de Navegación por Fecha (Historial Diario)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: const BoxDecoration(
+                color: Color(0xFF0A101D),
+                border: Border(bottom: BorderSide(color: Color(0xFF1E293B))),
+              ),
+              child: Row(
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.chevron_left, color: Colors.white, size: 22),
+                    tooltip: 'Día anterior',
+                    onPressed: () {
+                      setState(() {
+                        _fechaSeleccionada = _fechaSeleccionada.subtract(const Duration(days: 1));
+                      });
+                      _cargar();
+                    },
+                  ),
+                  Expanded(
+                    child: InkWell(
+                      onTap: () async {
+                        final picked = await showDatePicker(
+                          context: context,
+                          initialDate: _fechaSeleccionada,
+                          firstDate: DateTime(2023),
+                          lastDate: DateTime.now(),
+                        );
+                        if (picked != null) {
+                          setState(() => _fechaSeleccionada = picked);
+                          _cargar();
+                        }
+                      },
+                      borderRadius: BorderRadius.circular(8),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 10),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.08),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: _esHoy ? const Color(0xFF0284C7) : Colors.white24,
+                            width: _esHoy ? 1.5 : 1,
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              _esHoy ? Icons.today : Icons.event,
+                              size: 16,
+                              color: _esHoy ? const Color(0xFF38BDF8) : Colors.white70,
+                            ),
+                            const SizedBox(width: 8),
+                            Flexible(
+                              child: Text(
+                                _esHoy
+                                    ? 'Hoy (${DateFormat('dd/MM/yyyy').format(_fechaSeleccionada)})'
+                                    : DateFormat("dd/MM/yyyy - EEEE", 'es').format(_fechaSeleccionada),
+                                style: TextStyle(
+                                  color: _esHoy ? const Color(0xFF38BDF8) : Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 13,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    icon: Icon(
+                      Icons.chevron_right,
+                      color: _esHoy ? Colors.white24 : Colors.white,
+                      size: 22,
+                    ),
+                    tooltip: 'Día siguiente',
+                    onPressed: _esHoy
+                        ? null
+                        : () {
+                            setState(() {
+                              _fechaSeleccionada = _fechaSeleccionada.add(const Duration(days: 1));
+                            });
+                            _cargar();
+                          },
+                  ),
+                  if (!_esHoy)
+                    Padding(
+                      padding: const EdgeInsets.only(left: 4),
+                      child: TextButton.icon(
+                        onPressed: () {
+                          setState(() => _fechaSeleccionada = DateTime.now());
+                          _cargar();
+                        },
+                        icon: const Icon(Icons.restore, size: 14, color: Color(0xFF38BDF8)),
+                        label: const Text(
+                          'Hoy',
+                          style: TextStyle(color: Color(0xFF38BDF8), fontWeight: FontWeight.bold, fontSize: 12),
+                        ),
+                        style: TextButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          backgroundColor: Colors.white.withValues(alpha: 0.1),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+
+            // Banner informativo para fechas históricas
+            if (!_esHoy)
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                color: const Color(0xFFFEF3C7),
+                child: Row(
+                  children: [
+                    const Icon(Icons.history, size: 16, color: Color(0xFFB45309)),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Reporte histórico del ${DateFormat("dd 'de' MMMM, yyyy", 'es').format(_fechaSeleccionada)}. Al pulsar el botón PDF, se descargará el reporte de este día.',
+                        style: const TextStyle(fontSize: 12, color: Color(0xFF92400E), fontWeight: FontWeight.w500),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
             // Barra de filtros y contadores KPI
             Container(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 10),
@@ -1067,9 +1217,9 @@ class _VehiculosScreenState extends State<VehiculosScreen> {
                                           child: ElevatedButton.icon(
                                             onPressed: () => _mostrarModalActualizacionRapida(v),
                                             icon: const Icon(Icons.edit_calendar, size: 16),
-                                            label: const Text(
-                                              'Actualizar Estado Diario',
-                                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                            label: Text(
+                                              _esHoy ? 'Actualizar Estado Diario' : 'Modificar Registro del Día',
+                                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
                                             ),
                                             style: ElevatedButton.styleFrom(
                                               backgroundColor: const Color(0xFF0A101D),
