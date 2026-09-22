@@ -2,6 +2,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/asesor.dart';
 import '../models/atencion.dart';
 import '../models/encuesta.dart';
+import '../models/vehiculo.dart';
 
 class SupabaseService {
   static final client = Supabase.instance.client;
@@ -251,5 +252,61 @@ class SupabaseService {
         asesorNombre: e['asesor_nombre']?.toString() ?? 'Sin asesor',
       );
     }).toList();
+  }
+
+  // Vehículos (Showroom, Test Drive, Terraza)
+  static Future<List<Vehiculo>> getVehiculos() async {
+    final data = await client
+        .from('vehiculos')
+        .select()
+        .order('ubicacion', ascending: true)
+        .order('modelo', ascending: true);
+    return (data as List).map((e) => Vehiculo.fromJson(e)).toList();
+  }
+
+  static Future<void> addVehiculo(Vehiculo vehiculo) async {
+    await client.from('vehiculos').insert({
+      'modelo': vehiculo.modelo.trim(),
+      'color': vehiculo.color.trim(),
+      'chasis': vehiculo.chasis.trim().toUpperCase(),
+      'placa': vehiculo.placa?.trim().toUpperCase() ?? '',
+      'kilometraje': vehiculo.kilometraje,
+      'ubicacion': vehiculo.ubicacion,
+      'novedades': vehiculo.novedades?.trim() ?? '',
+      'created_at': DateTime.now().toIso8601String(),
+      'updated_at': DateTime.now().toIso8601String(),
+    });
+  }
+
+  static Future<void> updateEstadoVehiculo({
+    required String id,
+    required int kilometraje,
+    required String ubicacion,
+    String? novedades,
+  }) async {
+    await client.from('vehiculos').update({
+      'kilometraje': kilometraje,
+      'ubicacion': ubicacion,
+      'novedades': novedades?.trim() ?? '',
+      'updated_at': DateTime.now().toIso8601String(),
+    }).eq('id', id);
+  }
+
+  static Future<void> updateVehiculoCompleto(Vehiculo vehiculo) async {
+    if (vehiculo.id == null) return;
+    await client.from('vehiculos').update({
+      'modelo': vehiculo.modelo.trim(),
+      'color': vehiculo.color.trim(),
+      'chasis': vehiculo.chasis.trim().toUpperCase(),
+      'placa': vehiculo.placa?.trim().toUpperCase() ?? '',
+      'kilometraje': vehiculo.kilometraje,
+      'ubicacion': vehiculo.ubicacion,
+      'novedades': vehiculo.novedades?.trim() ?? '',
+      'updated_at': DateTime.now().toIso8601String(),
+    }).eq('id', vehiculo.id!);
+  }
+
+  static Future<void> deleteVehiculo(String id) async {
+    await client.from('vehiculos').delete().eq('id', id);
   }
 }

@@ -11,6 +11,7 @@ import 'screens/reportes_screen.dart';
 import 'screens/editar_atencion_screen.dart';
 import 'screens/encuesta_screen.dart';
 import 'screens/powerbi_screen.dart';
+import 'screens/vehiculos_screen.dart';
 import 'services/update_service.dart';
 import 'models/atencion.dart';
 
@@ -572,6 +573,14 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
             _HeaderIconButton(
+              icon: Icons.directions_car_outlined,
+              tooltip: 'Control de Vehículos',
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const VehiculosScreen()),
+              ),
+            ),
+            _HeaderIconButton(
               icon: Icons.cleaning_services_outlined,
               tooltip: 'Reiniciar Cola de Asesores',
               onPressed: () => _confirmarLimpiarAsesores(context),
@@ -601,6 +610,8 @@ class _HomeScreenState extends State<HomeScreen> {
                 if (value == 'nuevo') {
                   await Navigator.push(context, MaterialPageRoute(builder: (_) => const RegistroScreen()));
                   _cargar();
+                } else if (value == 'vehiculos') {
+                  Navigator.push(context, MaterialPageRoute(builder: (_) => const VehiculosScreen()));
                 } else if (value == 'powerbi') {
                   Navigator.push(context, MaterialPageRoute(builder: (_) => const PowerBiScreen()));
                 } else if (value == 'reportes') {
@@ -622,6 +633,16 @@ class _HomeScreenState extends State<HomeScreen> {
                       Icon(Icons.person_add_alt_1, size: 18, color: Color(0xFF0284C7)),
                       SizedBox(width: 10),
                       Text('Registrar Cliente'),
+                    ],
+                  ),
+                ),
+                const PopupMenuItem(
+                  value: 'vehiculos',
+                  child: Row(
+                    children: [
+                      Icon(Icons.directions_car_outlined, size: 18, color: Color(0xFF0F172A)),
+                      SizedBox(width: 10),
+                      Text('Control de Vehículos'),
                     ],
                   ),
                 ),

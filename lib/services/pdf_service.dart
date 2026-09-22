@@ -5,6 +5,7 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:intl/intl.dart';
 import '../models/atencion.dart';
 import '../models/encuesta.dart';
+import '../models/vehiculo.dart';
 import 'package:universal_html/html.dart' as html;
 import 'package:printing/printing.dart';
 
@@ -696,6 +697,193 @@ class PdfService {
           pw.Text(label, style: pw.TextStyle(fontSize: 10, color: PdfColors.grey700)),
         ],
       ),
+    );
+  }
+
+  static Future<void> generarReporteVehiculos(List<Vehiculo> vehiculos) async {
+    final pdf = pw.Document();
+    final dateFormat = DateFormat("dd 'de' MMMM, yyyy - HH:mm", 'es');
+    final now = DateTime.now();
+
+    _logoCache ??= pw.MemoryImage(
+      (await rootBundle.load('assets/img/images.png')).buffer.asUint8List(),
+    );
+    final logoImage = _logoCache!;
+
+    final totalVehiculos = vehiculos.length;
+    final totalShowroom = vehiculos.where((v) => v.ubicacion == 'Showroom').length;
+    final totalTestDrive = vehiculos.where((v) => v.ubicacion == 'Test Drive').length;
+    final totalTerraza = vehiculos.where((v) => v.ubicacion == 'Terraza').length;
+
+    final numberFormat = NumberFormat('#,###', 'es');
+
+    pdf.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.a4.landscape,
+        margin: const pw.EdgeInsets.all(28),
+        build: (context) => [
+          // Header
+          pw.Row(
+            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: pw.CrossAxisAlignment.center,
+            children: [
+              pw.Image(logoImage, height: 48),
+              pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.end,
+                children: [
+                  pw.Text(
+                    'REPORTE DE CONTROL DE VEHÍCULOS',
+                    style: pw.TextStyle(
+                      fontSize: 16,
+                      fontWeight: pw.FontWeight.bold,
+                      color: PdfColor.fromInt(0xFF0A101D),
+                    ),
+                  ),
+                  pw.SizedBox(height: 2),
+                  pw.Text(
+                    'Showroom • Test Drive • Terraza',
+                    style: pw.TextStyle(
+                      fontSize: 11,
+                      fontWeight: pw.FontWeight.bold,
+                      color: PdfColor.fromInt(0xFF0284C7),
+                    ),
+                  ),
+                  pw.SizedBox(height: 2),
+                  pw.Text(
+                    'Generado: ${dateFormat.format(now)}',
+                    style: pw.TextStyle(fontSize: 9, color: PdfColors.grey700),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          pw.SizedBox(height: 12),
+          pw.Divider(color: PdfColor.fromInt(0xFF0284C7), thickness: 1.5),
+          pw.SizedBox(height: 12),
+
+          // Resumen Cards
+          pw.Container(
+            padding: const pw.EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            decoration: pw.BoxDecoration(
+              color: PdfColors.grey100,
+              borderRadius: pw.BorderRadius.circular(6),
+              border: pw.Border.all(color: PdfColors.grey300),
+            ),
+            child: pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceAround,
+              children: [
+                _buildVehiculoMetric('TOTAL FLOTA', totalVehiculos.toString(), PdfColors.blueGrey900),
+                _buildVehiculoMetric('SHOWROOM', totalShowroom.toString(), PdfColors.green800),
+                _buildVehiculoMetric('TEST DRIVE', totalTestDrive.toString(), PdfColors.blue800),
+                _buildVehiculoMetric('TERRAZA', totalTerraza.toString(), PdfColors.orange800),
+              ],
+            ),
+          ),
+          pw.SizedBox(height: 16),
+
+          // Tabla de Vehículos
+          pw.Table.fromTextArray(
+            headerStyle: pw.TextStyle(
+              fontWeight: pw.FontWeight.bold,
+              color: PdfColors.white,
+              fontSize: 9,
+            ),
+            headerDecoration: pw.BoxDecoration(color: PdfColor.fromInt(0xFF0A101D)),
+            cellStyle: const pw.TextStyle(fontSize: 8.5),
+            cellAlignment: pw.Alignment.centerLeft,
+            cellPadding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+            border: pw.TableBorder.all(color: PdfColors.grey300, width: 0.5),
+            columnWidths: {
+              0: const pw.FixedColumnWidth(24),  // #
+              1: const pw.FlexColumnWidth(2.5), // Modelo
+              2: const pw.FlexColumnWidth(1.8), // Color
+              3: const pw.FlexColumnWidth(2.8), // Chasis
+              4: const pw.FlexColumnWidth(1.6), // Placa
+              5: const pw.FlexColumnWidth(1.8), // Km
+              6: const pw.FlexColumnWidth(2.0), // Ubicación
+              7: const pw.FlexColumnWidth(3.5), // Novedades
+            },
+            headers: [
+              '#',
+              'Modelo',
+              'Color',
+              'Chasis (VIN)',
+              'Placa',
+              'Kilometraje',
+              'Ubicación',
+              'Novedades / Observaciones',
+            ],
+            data: List.generate(vehiculos.length, (index) {
+              final v = vehiculos[index];
+              return [
+                '${index + 1}',
+                v.modelo,
+                v.color,
+                v.chasis,
+                (v.placa != null && v.placa!.trim().isNotEmpty) ? v.placa! : 'S/P',
+                '${numberFormat.format(v.kilometraje)} km',
+                v.ubicacion,
+                (v.novedades != null && v.novedades!.trim().isNotEmpty) ? v.novedades! : 'Sin novedades',
+              ];
+            }),
+          ),
+        ],
+        footer: (context) => pw.Container(
+          alignment: pw.Alignment.centerRight,
+          margin: const pw.EdgeInsets.only(top: 12),
+          child: pw.Row(
+            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+            children: [
+              pw.Text(
+                'BYD Auto Ecuador • Sistema Integrado de Control de Flota y Recepción',
+                style: pw.TextStyle(fontSize: 8, color: PdfColors.grey600),
+              ),
+              pw.Text(
+                'Página ${context.pageNumber} de ${context.pagesCount}',
+                style: pw.TextStyle(fontSize: 8, color: PdfColors.grey600),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    final bytes = await pdf.save();
+    final fileName = 'reporte_vehiculos_byd_${now.year}_${now.month}_${now.day}.pdf';
+
+    if (kIsWeb) {
+      final blob = html.Blob([bytes], 'application/pdf');
+      final url = html.Url.createObjectUrlFromBlob(blob);
+      html.AnchorElement(href: url)
+        ..setAttribute('download', fileName)
+        ..click();
+      html.Url.revokeObjectUrl(url);
+    } else {
+      await Printing.sharePdf(bytes: bytes, filename: fileName);
+    }
+  }
+
+  static pw.Widget _buildVehiculoMetric(String title, String count, PdfColor color) {
+    return pw.Column(
+      children: [
+        pw.Text(
+          count,
+          style: pw.TextStyle(
+            fontSize: 20,
+            fontWeight: pw.FontWeight.bold,
+            color: color,
+          ),
+        ),
+        pw.SizedBox(height: 2),
+        pw.Text(
+          title,
+          style: pw.TextStyle(
+            fontSize: 8.5,
+            fontWeight: pw.FontWeight.bold,
+            color: PdfColors.grey700,
+          ),
+        ),
+      ],
     );
   }
 }
