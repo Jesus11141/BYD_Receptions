@@ -741,7 +741,7 @@ class PdfService {
                   ),
                   pw.SizedBox(height: 2),
                   pw.Text(
-                    'Showroom • Test Drive • Terraza',
+                    'Showroom  |  Test Drive  |  Terraza',
                     style: pw.TextStyle(
                       fontSize: 11,
                       fontWeight: pw.FontWeight.bold,
@@ -835,7 +835,7 @@ class PdfService {
             mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
             children: [
               pw.Text(
-                'BYD Auto Ecuador • Sistema Integrado de Control de Flota y Recepción',
+                'BYD Auto Ecuador  |  Sistema Integrado de Control de Flota y Recepción',
                 style: pw.TextStyle(fontSize: 8, color: PdfColors.grey600),
               ),
               pw.Text(
